@@ -23,9 +23,7 @@ $dotenv->load();
  */
 
 $dotenv->required([
-    //    'TWILIO_ACCOUNT_SID',
-    //    'TWILIO_AUTH_TOKEN',
-    //    'TWILIO_PHONE_NUMBER',
+    'AUDIO_FILE',
     'BASE_URL',
 ])->notEmpty();
 

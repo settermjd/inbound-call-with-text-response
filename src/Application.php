@@ -30,6 +30,7 @@ final class Application
     public const string POSTAL_ADDRESS         = 'Our mailing address is 1234 Queen Street, Brisbane, QLD, 4000, Australia.';
     public const string CALLBACK               = 'Thank you for registering for a phone callback. We\'ll call you within the next 30 minutes.';
     public const string APPOINTMENT            = 'Thank you for seeking an appointment. The next available appointment is at 9:45 am on %s';
+    public const string SUPPORT_REDIRECT       = 'You\'re now being redirected to support. We\'ll respond via text to %s answer your questions';
 
     public const array OPTIONS_OPENING_HOURS                 = [
         'hours',
@@ -98,12 +99,9 @@ final class Application
         ResponseInterface $response,
     ): ResponseInterface {
         $twimlResponse = new VoiceResponse();
-        $twimlResponse->play("https://api.twilio.com/cowbell.mp3");
+        $twimlResponse->play($_SERVER['AUDIO_FILE']);
         $twimlResponse->say(
-            sprintf(
-                "You're now being redirected to support. We'll respond via text to %s answer your questions",
-                $request->getParsedBody()['From'],
-            ),
+            sprintf(self::SUPPORT_REDIRECT, $request->getParsedBody()['From']),
         );
         $twimlResponse->redirect(
             sprintf("%s/support", $_SERVER['BASE_URL']),
