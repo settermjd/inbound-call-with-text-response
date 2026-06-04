@@ -23,7 +23,6 @@ $dotenv->load();
  */
 
 $dotenv->required([
-    'AUDIO_FILE',
     'BASE_URL',
 ])->notEmpty();
 

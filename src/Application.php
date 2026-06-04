@@ -123,7 +123,6 @@ final class Application
      *
      * The body of the response contains TwiML that instructs Twilio to:
      *
-     * - Play a greeting from an audio file
      * - Tell the customer that they are being redirected to support and that
      *   the call will be followed up by SMS
      * - Redirect the caller to the support department
@@ -135,14 +134,9 @@ final class Application
         ResponseInterface $response,
     ): ResponseInterface {
         $twimlResponse = new VoiceResponse();
-        $twimlResponse->play($_SERVER['AUDIO_FILE']);
-        $twimlResponse->say(
-            sprintf(self::SUPPORT_REDIRECT, $request->getParsedBody()['From']),
-        );
-        $twimlResponse->redirect(
-            sprintf("%s/support", $_SERVER['BASE_URL']),
-            ["method" => "POST"],
-        );
+        $twimlResponse->say(self::SUPPORT_REDIRECT);
+        $twimlResponse->redirect("./send-sms", ["method" => "POST"]);
+        $twimlResponse->hangup();
 
         $response = $response->withHeader("content-type", "application/xml");
         $response->getBody()->write($twimlResponse->asXML());
