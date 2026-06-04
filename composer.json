@@ -26,14 +26,16 @@
     "require-dev": {
         "codeception/codeception": "^5.3",
         "codeception/lib-asserts": "^3.2",
+        "codeception/module-asserts": "*",
+        "codeception/module-phpbrowser": "*",
         "codeception/module-rest": "^3.4",
         "friendsofphp/php-cs-fixer": "^3.93",
         "laminas/laminas-coding-standard": "^3.1",
         "laminas/laminas-component-installer": "^3.7",
         "laminas/laminas-diactoros": "^3.8",
         "phpstan/phpdoc-parser": "^2.3",
-        "codeception/module-phpbrowser": "*",
-        "codeception/module-asserts": "*"
+        "phpstan/phpstan": "^2.2",
+        "phpstan/phpstan-deprecation-rules": "^2.0"
     },
     "config": {
         "allow-plugins": {
@@ -49,7 +51,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "AppTest\\": "test/"
+            "Tests\\": "tests/"
         }
     },
     "scripts": {

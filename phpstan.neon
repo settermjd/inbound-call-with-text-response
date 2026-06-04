@@ -1,5 +1,10 @@
 parameters:
-	level: 6
-	paths:
-		- src
-		- test
+    level: 10 
+    paths:
+        - src
+        - tests
+    excludePaths:
+        analyse:
+        - tests/Support
+    universalObjectCratesClasses:
+        - Codeception\Util\XmlBuilder
