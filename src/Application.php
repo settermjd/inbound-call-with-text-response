@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace App;
 
 use DateTime;
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\App as SlimApp;
 use Slim\Interfaces\RouteInterface;
 use Slim\Middleware\ContentLengthMiddleware;
+use Twilio\Rest\Client;
 use Twilio\TwiML\MessagingResponse;
 use Twilio\TwiML\VoiceResponse;
 
-use function is_array;
+use function array_key_exists;
+use function assert;
 use function is_string;
 use function sprintf;
 use function strcasecmp;
@@ -24,25 +27,58 @@ use function strcasecmp;
  */
 final class Application
 {
-    public const string OPENING_HOURS          = "Our opening hours are Mon to Fri from 8:30 am to 5:30 pm, and Sat from 9:30 am to 1:30 pm.";
-    public const string SUPPORT_EMAIL          = "For general support, email support@example.org.";
-    public const string ACCOUNT_BILLIING_EMAIL = "For account support, email accounts@example.org. For billing support, email billing@example.org.";
-    public const string POSTAL_ADDRESS         = 'Our mailing address is 1234 Queen Street, Brisbane, QLD, 4000, Australia.';
-    public const string CALLBACK               = 'Thank you for registering for a phone callback. We\'ll call you within the next 30 minutes.';
-    public const string APPOINTMENT            = 'Thank you for seeking an appointment. The next available appointment is at 9:45 am on %s';
-    public const string SUPPORT_REDIRECT       = 'You\'re now being redirected to support. We\'ll respond via text to %s answer your questions';
+    public const string ACCOUNT_BILLIING_EMAIL = <<<EOF
+    For account support, email accounts@example.org. For billing support, email billing@example.org."
+    EOF;
 
-    public const array OPTIONS_OPENING_HOURS                 = [
+    public const string APPOINTMENT = <<<EOF
+    Thank you for seeking an appointment.
+    The next available appointment is at 9:45 am on %s
+    EOF;
+
+    public const string POSTAL_ADDRESS = 'Our mailing address is 1234 Queen Street, Brisbane, QLD, 4000, Australia.';
+
+    public const string CALLBACK = <<<EOF
+    Thank you for registering for a phone callback.
+    We'll call you within the next 30 minutes.
+    EOF;
+
+    public const string SUPPORT_REDIRECT = <<<EOF
+    We're not able to handle support calls directly at the moment.
+    However, we can provide limited support via SMS.
+    We'll send you an SMS in a moment with the available options.
+    EOF;
+
+    public const string SUPPORT_OPTIONS = <<<EOF
+    Please choose from the following support options:
+    - For our opening hours, reply with: "opening hours".
+    - For our postal address, reply with: "postal address".
+    - For our support email, reply with: "support email".
+    - For the account support email, reply with: "account support email".
+    - For the billing support email, reply with: "billing support email".
+    - To book an appointment, reply with: "book appointment".
+    - To request a callback, reply with: "callback".
+    EOF;
+
+    public const string OPENING_HOURS = <<<EOF
+    Our opening hours are Mon to Fri from 8:30 am to 5:30 pm, and Sat from 9:30 am to 1:30 pm."
+    EOF;
+
+    public const string SUPPORT_EMAIL = "For general support, email support@example.org.";
+
+    public const array OPTIONS_OPENING_HOURS = [
         'hours',
         'opening hours',
     ];
+
     public const array OPTIONS_ACCOUNT_BILLING_SUPPORT_EMAIL = [
         'account support email',
         'account',
         'billing support email',
         'billing',
     ];
-    public const array OPTIONS_APPOINTMENT                   = [
+
+    public const array OPTIONS_APPOINTMENT = [
         'appointment',
         'book appointment',
     ];
@@ -75,7 +111,7 @@ final class Application
     }
 
     /**
-     * run launches the application
+     * Launches the application
      */
     public function run(): void
     {
@@ -115,35 +151,54 @@ final class Application
     }
 
     /**
-     * Returns TwiML to send a support SMS reply to an incoming SMS
+     * Handles support SMS requests
      *
-     * The body of the response contains TwiML that instructs Twilio to do one of:
+     * The body of the response contains TwiML that instructs Twilio to send a
+     * reply with the following details:
      *
-     *   - Send the opening hours
-     *   - Send the general support email address
-     *   - Send the account and billing support email address
-     *   - Send the business' mailing address
-     *   - Register for a callback
-     *   - Make an appointment
+     *   - The opening hours
+     *   - The general support email address
+     *   - The account and billing support email address
+     *   - The business' mailing address
+     *
+     * Additionally, it can (faux) handle:
+     *
+     *   - Registering for a callback
+     *   - Making an appointment
+     *
+     * Finally, the function provides the set of options to choose from if the
+     * request to the application is not in response to an incoming support
+     * SMS, i.e., it is the initial redirect after the incoming support call.
      *
      * @see https://www.twilio.com/docs/messaging/twiml/message
+     * @see https://www.twilio.com/docs/voice/twiml#request-parameters
      */
     public function handleSupportRequestsBySms(
         ServerRequestInterface $request,
         ResponseInterface $response,
     ): ResponseInterface {
-        $body    = $request->getParsedBody()['Body'];
-        $message = match (true) {
-            $this->isMatch($body, self::OPTIONS_OPENING_HOURS) => self::OPENING_HOURS,
-            $this->isMatch($body, 'support email') => self::SUPPORT_EMAIL,
-            $this->isMatch($body, self::OPTIONS_ACCOUNT_BILLING_SUPPORT_EMAIL) => self::ACCOUNT_BILLIING_EMAIL,
-            $this->isMatch($body, 'postal address') => self::POSTAL_ADDRESS,
-            $this->isMatch($body, 'callback') => self::CALLBACK,
-            $this->isMatch($body, self::OPTIONS_APPOINTMENT) => sprintf(
-                self::APPOINTMENT,
-                new DateTime('next thursday')->format('l, F jS'),
-            ),
-            default => <<<EOF
+        $requestData = (array) $request->getParsedBody();
+
+        $twimlResponse = new MessagingResponse();
+        if (! array_key_exists('Body', $requestData)) {
+            $twimlResponse->message(self::SUPPORT_OPTIONS, [
+                'to'   => $requestData['From'],
+                'from' => $requestData['To'],
+            ]);
+        } else {
+            $body = $requestData['Body'];
+            assert(is_string($body));
+            $message = match (true) {
+                $this->isMatch($body, self::OPTIONS_OPENING_HOURS) => self::OPENING_HOURS,
+                $this->isMatch($body, 'support email') => self::SUPPORT_EMAIL,
+                $this->isMatch($body, self::OPTIONS_ACCOUNT_BILLING_SUPPORT_EMAIL) => self::ACCOUNT_BILLIING_EMAIL,
+                $this->isMatch($body, 'postal address') => self::POSTAL_ADDRESS,
+                $this->isMatch($body, 'callback') => self::CALLBACK,
+                $this->isMatch($body, self::OPTIONS_APPOINTMENT) => sprintf(
+                    self::APPOINTMENT,
+                    new DateTime('next thursday')->format('l, F jS'),
+                ),
+                default => <<<EOF
             Please choose from:
             - Account support email
             - Billing support email
@@ -153,10 +208,9 @@ final class Application
             - Postal address
             - Support Email
             EOF,
-        };
-
-        $twimlResponse = new MessagingResponse();
-        $twimlResponse->message($message);
+            };
+            $twimlResponse->message($message);
+        }
 
         $response = $response->withHeader('content-type', 'application/xml');
         $response->getBody()->write($twimlResponse->asXML());

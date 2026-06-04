@@ -4,16 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Api;
 
-use DateTime;
+use App\Application;
 use Codeception\Example;
 use Codeception\Util\XmlBuilder;
+use DateTime;
 use Tests\Support\ApiTester;
 
+use function assert;
+use function is_string;
 use function sprintf;
 
 final class HandleIncomingCallCest
 {
-    public const string BASE_URL     = "http://localhost:8080";
     public const string PHONE_NUMBER = "+61123456789";
 
     /**
@@ -23,10 +25,10 @@ final class HandleIncomingCallCest
      * - Respond with a greeting, such as "Thanks for calling, we'll respond via text to answer your questions"
      * - Continue the conversation via SMS (text)
      */
-    public function canReceiveAnIncomingCallAndForwardItToSupport(ApiTester $I): void
+    public function canReceiveAnIncomingCallAndForwardItToSupport(ApiTester $i): void
     {
-        $I->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
-        $I->sendPost(
+        $i->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
+        $i->sendPost(
             '/',
             [
                 'From'      => self::PHONE_NUMBER,
@@ -34,9 +36,9 @@ final class HandleIncomingCallCest
             ],
         );
 
-        $I->seeResponseCodeIsSuccessful();
-        $I->seeResponseIsXml();
-        $I->seeHttpHeader("content-type", "application/xml");
+        $i->seeResponseCodeIsSuccessful();
+        $i->seeResponseIsXml();
+        $i->seeHttpHeader("content-type", "application/xml");
 
         /**
          * Example response:
@@ -50,42 +52,53 @@ final class HandleIncomingCallCest
          */
         $xml = new XmlBuilder();
         $xml->Response
-            ->Play
-                ->val('https://api.twilio.com/cowbell.mp3')
-                ->parent()
             ->Say
-                ->val(
-                    sprintf(
-                        "You're now being redirected to support. We'll respond via text to %s answer your questions",
-                        self::PHONE_NUMBER,
-                    ),
-                )
+                ->val(Application::SUPPORT_REDIRECT)
                 ->parent()
             ->Redirect
-                ->val(sprintf('%s/support', self::BASE_URL))
-                ->attr('method', 'POST');
-        $I->seeXmlResponseIncludes($xml->__toString());
+                ->val('./send-sms')
+                ->attr('method', 'POST')
+                ->parent()
+            ->Hangup;
+        $i->seeXmlResponseIncludes($xml->__toString());
+    }
+
+    public function willProvideInformationalResponseIfNoBodyIsPresent(ApiTester $i): void
+    {
+        $i->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
+        $i->sendPost(
+            '/support',
+            [
+                'CallStatus' => 'in-progress',
+                'Direction'  => 'inbound',
+                'From'       => self::PHONE_NUMBER,
+                'To'         => '+12132635137',
+            ],
+        );
+
+        $i->seeResponseCodeIsSuccessful();
+        $i->seeResponseIsXml();
+        $i->seeHttpHeader("content-type", "application/xml");
+
+        $xml = new XmlBuilder();
+        $xml->Response
+            ->Message
+                ->val(Application::SUPPORT_OPTIONS)
+                ->attr('to', self::PHONE_NUMBER)
+                ->attr('from', '+12132635137');
+        $i->seeXmlResponseIncludes($xml->__toString());
     }
 
     /**
-     * This test checks whether the support endpoint can respond to the limited
-     * options that it should support.
+     * Checks whether the support endpoint can respond to the options it should support
      *
-     * The options that are supported are:
-     *   - What are the opening hours? // "1"" or "Opening Hours"
-     *   - What is the general support email address? // "2" or "Support Email"
-     *   - What is the account and billing support email address? // "3" or "Account support email" or "Billing support email"
-     *   - What is the business' mailing address? // "4" or "Mailing address" or "Business mailing address"
-     *   - Register for a callback // "5" or "Callback"
-     *   - Make an appointment to talk about something... // "6" or "Book appointment"
-     */
-    /**
      * @dataProvider pageProvider
+     * @param Example<string> $example
      */
-    public function canRespondToIncomingSMS(ApiTester $I, Example $example): void
+    public function canRespondToIncomingSMS(ApiTester $i, Example $example): void
     {
-        $I->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
-        $I->sendPost(
+        $i->haveHttpHeader('Content-Type', 'application/x-www-form-urlencoded');
+        $i->sendPost(
             '/support',
             [
                 'From'      => self::PHONE_NUMBER,
@@ -94,9 +107,9 @@ final class HandleIncomingCallCest
             ],
         );
 
-        $I->seeResponseCodeIsSuccessful();
-        $I->seeResponseIsXml();
-        $I->seeHttpHeader("content-type", "application/xml");
+        $i->seeResponseCodeIsSuccessful();
+        $i->seeResponseIsXml();
+        $i->seeHttpHeader("content-type", "application/xml");
 
         /**
          * Example (formatted) response:
@@ -108,60 +121,59 @@ final class HandleIncomingCallCest
          *     </Message>
          * </Response>
          */
+        assert(is_string($example['response']));
         $xml = new XmlBuilder();
         $xml->Response
             ->Message->val($example['response']);
-        $I->seeXmlResponseIncludes($xml->__toString());
+        $i->seeXmlResponseIncludes($xml->__toString());
     }
 
+    /**
+     * @return array<int,array<string,string>>
+     */
     protected function pageProvider(): array
     {
-        $openingHoursResponse           = "Our opening hours are Mon to Fri from 8:30 am to 5:30 pm, and Sat from 9:30 am to 1:30 pm.";
-        $supportEmailResponse           = "For general support, email support@example.org.";
-        $accountBillingEmailResponse    = "For account support, email accounts@example.org. For billing support, email billing@example.org.";
-        $businessMailingAddressResponse = "Our mailing address is 1234 Queen Street, Brisbane, QLD, 4000, Australia.";
-        $callbackResponse               = 'Thank you for registering for a phone callback. We\'ll call you within the next 30 minutes.';
-        $appointmentResponse            = sprintf(
-            'Thank you for seeking an appointment. The next available appointment is at 9:45 am on %s',
+        $appointmentResponse = sprintf(
+            Application::APPOINTMENT,
             new DateTime('next thursday')->format('l, F jS'),
         );
 
         return [
             [
                 'body'     => 'Opening Hours',
-                'response' => $openingHoursResponse,
+                'response' => Application::OPENING_HOURS,
             ],
             [
                 'body'     => 'Hours',
-                'response' => $openingHoursResponse,
+                'response' => Application::OPENING_HOURS,
             ],
             [
                 'body'     => 'Support Email',
-                'response' => $supportEmailResponse,
+                'response' => Application::SUPPORT_EMAIL,
             ],
             [
                 'body'     => 'Account Support Email',
-                'response' => $accountBillingEmailResponse,
+                'response' => Application::ACCOUNT_BILLIING_EMAIL,
             ],
             [
                 'body'     => 'Billing Support Email',
-                'response' => $accountBillingEmailResponse,
+                'response' => Application::ACCOUNT_BILLIING_EMAIL,
             ],
             [
                 'body'     => 'Account',
-                'response' => $accountBillingEmailResponse,
+                'response' => Application::ACCOUNT_BILLIING_EMAIL,
             ],
             [
                 'body'     => 'Billing',
-                'response' => $accountBillingEmailResponse,
+                'response' => Application::ACCOUNT_BILLIING_EMAIL,
             ],
             [
                 'body'     => 'Postal address',
-                'response' => $businessMailingAddressResponse,
+                'response' => Application::POSTAL_ADDRESS,
             ],
             [
                 'body'     => 'Callback',
-                'response' => $callbackResponse,
+                'response' => Application::CALLBACK,
             ],
             [
                 'body'     => 'Book appointment',
