@@ -83,6 +83,9 @@ final class Application
         'book appointment',
     ];
 
+    /**
+     * @param SlimApp<ContainerInterface|null> $app
+     */
     public function __construct(private readonly SlimApp $app)
     {
         $app->add(new ContentLengthMiddleware());
@@ -253,11 +256,9 @@ final class Application
             return strcasecmp($body, $possibleValues) === 0;
         }
 
-        if (is_array($possibleValues)) {
-            foreach ($possibleValues as $message) {
-                if (strcasecmp($body, $message) === 0) {
-                    return true;
-                }
+        foreach ($possibleValues as $message) {
+            if (strcasecmp($body, $message) === 0) {
+                return true;
             }
         }
 
