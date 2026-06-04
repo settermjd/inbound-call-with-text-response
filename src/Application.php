@@ -98,6 +98,7 @@ final class Application
     {
         $this->app->post('/', [$this, 'handleIncomingCall']);
         $this->app->post('/support', [$this, 'handleSupportRequestsBySms']);
+        $this->app->post('/send-sms', [$this, 'handleSendInitialSupportSms']);
     }
 
     /**
@@ -208,6 +209,37 @@ final class Application
 
         $response = $response->withHeader('content-type', 'application/xml');
         $response->getBody()->write($twimlResponse->asXML());
+
+        return $response;
+    }
+
+    /**
+     * Sends an SMS to the caller with the self-service support options
+     *
+     * @see https://www.twilio.com/docs/voice/twiml#twilios-request-to-your-application
+     */
+    public function handleSendInitialSupportSms(
+        ServerRequestInterface $request,
+        ResponseInterface $response,
+    ): ResponseInterface {
+        $requestData = (array) $request->getParsedBody();
+        assert(is_string($requestData["From"]));
+
+        $client = $this->app->getContainer()?->get(Client::class);
+        if ($client instanceof Client) {
+            $message = $client
+                ->messages
+                ->create(
+                    $requestData["From"],
+                    [
+                        "body" => self::SUPPORT_OPTIONS,
+                        "from" => $requestData["To"],
+                    ],
+                );
+        }
+
+        $response = $response->withHeader("content-type", "application/xml");
+        $response->getBody()->write(new VoiceResponse()->asXML());
 
         return $response;
     }

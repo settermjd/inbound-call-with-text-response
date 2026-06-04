@@ -17,16 +17,6 @@ $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
 /**
- * The following three environment variables are are required for using the Twilio Client, and
- * sending notifications (SMS, MMS, and WhatsApp messages). So, we now ensure that they're
- * available and not empty.
- */
-
-$dotenv->required([
-    'BASE_URL',
-])->notEmpty();
-
-/**
  * We next set up the application's DI container, which uses PHP-DI.
  */
 $container = new Container();
